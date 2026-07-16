@@ -32,7 +32,7 @@
             transition: background 0.3s;
             width: 100%;
         }
-        .btn:disabled { background-color: #9ca3af; }
+        .btn:disabled { background-color: #9ca3af; cursor: not-allowed; }
         #status {
             margin-top: 25px;
             font-size: 18px;
@@ -43,10 +43,9 @@
             font-size: 14px;
             color: #6b7280;
         }
-        /* Style Tambahan untuk Tampilan QR Code di Layar HP */
         #qrContainer {
             margin-top: 25px;
-            display: none; /* Awalnya disembunyikan, muncul setelah scan */
+            display: none;
         }
         #qrImage {
             width: 160px;
@@ -62,11 +61,11 @@
 
 <div class="container">
     <h2>NFC Scan App</h2>
-    <p>Dekatkan kartu RFID/NFC ke bagian belakang HP setelah menekan tombol di bawah.</p>
+    <p>Tekan tombol di bawah sekali untuk mengaktifkan sensor, lalu dekatkan kartu RFID/NFC ke bagian belakang HP.</p>
     
-    <button id="scanButton" class="btn">Mulai Pindai NFC</button>
+    <button id="scanButton" class="btn">Aktifkan Sensor NFC</button>
     
-    <div id="status" style="color: #4b5563;">Status: Siap</div>
+    <div id="status" style="color: #4b5563;">Status: Sensor Mati</div>
     <div id="log">---</div>
     
     <div id="qrContainer">
@@ -79,13 +78,14 @@
     const scanButton = document.getElementById("scanButton");
     const statusDiv = document.getElementById("status");
     const logDiv = document.getElementById("log");
-    
-    // Panggil elemen kontainer QR Code
     const qrContainer = document.getElementById("qrContainer");
     const qrImage = document.getElementById("qrImage");
 
-    // LAKUKAN: PASTE URL WEB APP BARU ANDA YANG BERAKHIRAN /exec DI SINI
-    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzuGEsXU6BAQ-Y7qo4aZF7Yu5AcZSnmFzQhI1yuWsuzKMM38wataa28j9GryUi8cPUy/exec";
+    // PASTE URL WEB APP GOOGLE APPS SCRIPT DI SINI
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbydIBcymACdb8cg_4hGxYitqQ1RORDwi7_Q8FvJlujEBruZ7lmHH0cUWU8qb0vNtNgJ/exec";
+
+    let ndef = null;
+    let isProcessing = false; // Kunci pengaman agar tidak double scan saat loading
 
     scanButton.addEventListener("click", async () => {
         if (!("NDEFReader" in window)) {
@@ -96,22 +96,32 @@
 
         try {
             statusDiv.innerText = "Status: Menghubungkan sensor...";
-            const ndef = new NDEFReader();
+            ndef = new NDEFReader();
             await ndef.scan();
             
-            statusDiv.innerText = "Status: Tempelkan kartu NFC...";
+            // Perubahan UI setelah sensor berhasil menyala
+            statusDiv.innerText = "Status: Sensor Aktif! Tempelkan kartu...";
             statusDiv.style.color = "#d97706";
-            scanButton.disabled = true;
+            scanButton.disabled = true; 
+            scanButton.innerText = "Sensor NFC Siap";
 
+            // Event listener dipasang CUKUP SEKALI di sini
             ndef.addEventListener("readingerror", () => {
-                logDiv.innerText = "Gagal membaca kartu. Coba tempelkan ulang.";
+                if (!isProcessing) {
+                    logDiv.innerText = "Gagal membaca kartu. Coba tempelkan ulang.";
+                }
             });
 
             ndef.addEventListener("reading", async ({ serialNumber }) => {
+                // Jika sedang ada proses kirim data yang berjalan, abaikan pindaian baru
+                if (isProcessing) return; 
+                
+                isProcessing = true; // Kunci sensor aktif
+                
                 const uid = serialNumber.replace(/:/g, "").toUpperCase();
                 logDiv.innerText = "UID Terbaca: " + uid;
                 
-                // 1. PROSES LOKAL: Langsung munculkan QR Code di layar HP saat itu juga
+                // 1. Tampilkan QR Code lokal secara instan
                 qrImage.src = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${uid}`;
                 qrContainer.style.display = "block";
                 
@@ -119,38 +129,38 @@
                 statusDiv.style.color = "#2563eb";
 
                 try {
-                    // 2. PROSES ONLINE: Mengirim data ke Google Sheets untuk dicek & disimpan beserta QR-nya
+                    // 2. Kirim ke Google Sheets
                     const response = await fetch(`${APPS_SCRIPT_URL}?uid=${uid}`);
                     const data = await response.json();
                     
                     statusDiv.innerText = "Status: " + data.message;
                     
                     if (data.status === "success") {
-                        statusDiv.style.color = "#16a34a"; // Hijau jika data baru sukses tersimpan ke Sheet
+                        statusDiv.style.color = "#16a34a"; // Hijau jika sukses
                     } else if (data.status === "exists") {
-                        statusDiv.style.color = "#d97706"; // Oranye jika data sudah ada di database
+                        statusDiv.style.color = "#d97706"; // Oranye jika duplikat
                     } else {
                         statusDiv.style.color = "#dc2626";
                     }
 
                 } catch (err) {
-                    statusDiv.innerText = "Status: Gagal memproses ke sistem.";
+                    statusDiv.innerText = "Status: Gagal terhubung ke Google Sheets.";
                     statusDiv.style.color = "#dc2626";
                     logDiv.innerText = err.message;
                 }
 
-                // Siapkan pemindaian berikutnya
+                // Beri jeda 3 detik agar user bisa membaca status sebelum sensor siap menerima kartu berikutnya
                 setTimeout(() => {
-                    statusDiv.innerText = "Status: Siap untuk kartu berikutnya...";
-                    statusDiv.style.color = "#4b5563";
-                    scanButton.disabled = false;
-                }, 4000);
+                    statusDiv.innerText = "Status: Standby. Tempelkan kartu berikutnya...";
+                    statusDiv.style.color = "#d97706";
+                    isProcessing = false; // Buka kembali kunci sensor
+                }, 3000);
             });
 
         } catch (error) {
-            statusDiv.innerText = "Error: " + error;
+            statusDiv.innerText = "Error: Gagal mengaktifkan sensor. Pastikan NFC HP menyala.";
             statusDiv.style.color = "#dc2626";
-            scanButton.disabled = false;
+            console.error(error);
         }
     });
 </script>
