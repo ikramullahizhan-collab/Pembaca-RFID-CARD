@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NFC Reader ke Google Sheets</title>
+    <title>NFC Reader ke Google Sheets + QR Code</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -43,6 +43,19 @@
             font-size: 14px;
             color: #6b7280;
         }
+        /* Style Tambahan untuk Tampilan QR Code di Layar HP */
+        #qrContainer {
+            margin-top: 25px;
+            display: none; /* Awalnya disembunyikan, muncul setelah scan */
+        }
+        #qrImage {
+            width: 160px;
+            height: 160px;
+            border-radius: 10px;
+            border: 2px solid #e5e7eb;
+            padding: 5px;
+            background-color: white;
+        }
     </style>
 </head>
 <body>
@@ -55,15 +68,24 @@
     
     <div id="status" style="color: #4b5563;">Status: Siap</div>
     <div id="log">---</div>
+    
+    <div id="qrContainer">
+        <p style="font-size: 14px; color: #4b5563; font-weight: bold; margin-bottom: 8px;">QR Code ID Kartu Anda:</p>
+        <img id="qrImage" src="" alt="QR Code">
+    </div>
 </div>
 
 <script>
-   const scanButton = document.getElementById("scanButton");
+    const scanButton = document.getElementById("scanButton");
     const statusDiv = document.getElementById("status");
     const logDiv = document.getElementById("log");
+    
+    // Panggil elemen kontainer QR Code
+    const qrContainer = document.getElementById("qrContainer");
+    const qrImage = document.getElementById("qrImage");
 
-    // GANTI DENGAN URL WEB APP BARU ANDA
-    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbydDd-iXB7bsZ4TgjUvooSTOBblZ4fjJeuWgs99dxq96HFyzid-VtIZ70Vxk_82K8Y/exec";
+    // LAKUKAN: PASTE URL WEB APP BARU ANDA YANG BERAKHIRAN /exec DI SINI
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxOD0EAgX97WB9Zvc2ylEJ1vQg9w5MhNn3PtTlcTbujBKnYWgN8LS33yu-i_jGLAHaX/exec";
 
     scanButton.addEventListener("click", async () => {
         if (!("NDEFReader" in window)) {
@@ -88,23 +110,27 @@
             ndef.addEventListener("reading", async ({ serialNumber }) => {
                 const uid = serialNumber.replace(/:/g, "").toUpperCase();
                 logDiv.innerText = "UID Terbaca: " + uid;
+                
+                // 1. PROSES LOKAL: Langsung munculkan QR Code di layar HP saat itu juga
+                qrImage.src = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${uid}`;
+                qrContainer.style.display = "block";
+                
                 statusDiv.innerText = "Status: Memeriksa database...";
                 statusDiv.style.color = "#2563eb";
 
                 try {
-                    // Kunci Perubahan: Menghapus 'no-cors' agar browser bisa membaca teks balasan dari Google
+                    // 2. PROSES ONLINE: Mengirim data ke Google Sheets untuk dicek & disimpan beserta QR-nya
                     const response = await fetch(`${APPS_SCRIPT_URL}?uid=${uid}`);
-                    const data = await response.json(); // Mengubah balasan menjadi JSON objek
+                    const data = await response.json();
                     
-                    // Menampilkan pesan sesuai kondisi dari Google Apps Script
                     statusDiv.innerText = "Status: " + data.message;
                     
                     if (data.status === "success") {
-                        statusDiv.style.color = "#16a34a"; // Warna HIJAU jika berhasil simpan baru
+                        statusDiv.style.color = "#16a34a"; // Hijau jika data baru sukses tersimpan ke Sheet
                     } else if (data.status === "exists") {
-                        statusDiv.style.color = "#d97706"; // Warna ORANYE/KUNING jika ID sudah ada
+                        statusDiv.style.color = "#d97706"; // Oranye jika data sudah ada di database
                     } else {
-                        statusDiv.style.color = "#dc2626"; // Warna MERAH jika ada error lain
+                        statusDiv.style.color = "#dc2626";
                     }
 
                 } catch (err) {
@@ -118,7 +144,7 @@
                     statusDiv.innerText = "Status: Siap untuk kartu berikutnya...";
                     statusDiv.style.color = "#4b5563";
                     scanButton.disabled = false;
-                }, 3000);
+                }, 4000);
             });
 
         } catch (error) {
