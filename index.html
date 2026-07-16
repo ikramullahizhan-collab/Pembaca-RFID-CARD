@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NFC Reader ke Google Sheets</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            text-align: center;
+            padding: 40px 20px;
+            background-color: #f3f4f6;
+            color: #333;
+        }
+        .container {
+            max-width: 400px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+        .btn {
+            padding: 15px 30px;
+            font-size: 18px;
+            font-weight: bold;
+            color: white;
+            background-color: #2563eb;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.3s;
+            width: 100%;
+        }
+        .btn:disabled { background-color: #9ca3af; }
+        #status {
+            margin-top: 25px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        #log {
+            margin-top: 15px;
+            font-size: 14px;
+            color: #6b7280;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>NFC Scan App</h2>
+    <p>Dekatkan kartu RFID/NFC ke bagian belakang HP setelah menekan tombol di bawah.</p>
+    
+    <button id="scanButton" class="btn">Mulai Pindai NFC</button>
+    
+    <div id="status" style="color: #4b5563;">Status: Siap</div>
+    <div id="log">---</div>
+</div>
+
+<script>
+    const scanButton = document.getElementById("scanButton");
+    const statusDiv = document.getElementById("status");
+    const logDiv = document.getElementById("log");
+
+    // MASUKKAN URL GOOGLE APPS SCRIPT ANDA DI SINI
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/u/1/s/AKfycbzO2015uwpYGDvQ4WR5jOA-fe82KF1W80Ewtz8R5Ood9eMRTRGvFXwc0OKH5qvgbbaM/exec";
+
+    scanButton.addEventListener("click", async () => {
+        // Cek apakah browser mendukung Web NFC
+        if (!("NDEFReader" in window)) {
+            statusDiv.innerText = "Error: Browser Anda tidak mendukung Web NFC API.";
+            statusDiv.style.color = "#dc2626";
+            return;
+        }
+
+        try {
+            statusDiv.innerText = "Status: Menghubungkan sensor...";
+            const ndef = new NDEFReader();
+            await ndef.scan(); // Meminta izin akses sensor NFC HP
+            
+            statusDiv.innerText = "Status: Tempelkan kartu NFC...";
+            statusDiv.style.color = "#d97706";
+            scanButton.disabled = true;
+
+            ndef.addEventListener("readingerror", () => {
+                logDiv.innerText = "Gagal membaca kartu. Coba tempelkan ulang.";
+            });
+
+            ndef.addEventListener("reading", async ({ serialNumber }) => {
+                // Bersihkan format UID (hilangkan tanda titik dua dan buat huruf kapital)
+                const uid = serialNumber.replace(/:/g, "").toUpperCase();
+                logDiv.innerText = "UID Terbaca: " + uid;
+                statusDiv.innerText = "Status: Mengirim data ke Google Sheets...";
+                statusDiv.style.color = "#2563eb";
+
+                try {
+                    // Mengirim UID ke Google Apps Script menggunakan HTTP GET
+                    // 'no-cors' digunakan untuk menghindari masalah proteksi CORS browser
+                    await fetch(`${APPS_SCRIPT_URL}?uid=${uid}`, { mode: 'no-cors' });
+                    
+                    statusDiv.innerText = "Status: Sukses! Data tersimpan.";
+                    statusDiv.style.color = "#16a34a";
+                } catch (err) {
+                    statusDiv.innerText = "Status: Gagal mengirim data.";
+                    statusDiv.style.color = "#dc2626";
+                    logDiv.innerText = err.message;
+                }
+
+                // Siapkan pemindaian berikutnya setelah jeda 3 detik
+                setTimeout(() => {
+                    statusDiv.innerText = "Status: Siap untuk kartu berikutnya...";
+                    statusDiv.style.color = "#4b5563";
+                    scanButton.disabled = false;
+                }, 3000);
+            });
+
+        } catch (error) {
+            statusDiv.innerText = "Error: " + error;
+            statusDiv.style.color = "#dc2626";
+            scanButton.disabled = false;
+        }
+    });
+</script>
+
+</body>
+</html>
