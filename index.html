@@ -58,15 +58,14 @@
 </div>
 
 <script>
-    const scanButton = document.getElementById("scanButton");
+   const scanButton = document.getElementById("scanButton");
     const statusDiv = document.getElementById("status");
     const logDiv = document.getElementById("log");
 
-    // MASUKKAN URL GOOGLE APPS SCRIPT ANDA DI SINI
-    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxdv4V2PRvXL2cgfW2vZBNkTaR_EsZ3eGB1B0uEbMT3jFKB9puh6bruV78YgVOp2-uq/exec";
+    // GANTI DENGAN URL WEB APP BARU ANDA
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwjpk6b9qpqw10eZpgVW8KpIVb_UjSuZvkmdmC6-0zNAAYR8aOup-JH4ZD8THSbYtgL/exec";
 
     scanButton.addEventListener("click", async () => {
-        // Cek apakah browser mendukung Web NFC
         if (!("NDEFReader" in window)) {
             statusDiv.innerText = "Error: Browser Anda tidak mendukung Web NFC API.";
             statusDiv.style.color = "#dc2626";
@@ -76,7 +75,7 @@
         try {
             statusDiv.innerText = "Status: Menghubungkan sensor...";
             const ndef = new NDEFReader();
-            await ndef.scan(); // Meminta izin akses sensor NFC HP
+            await ndef.scan();
             
             statusDiv.innerText = "Status: Tempelkan kartu NFC...";
             statusDiv.style.color = "#d97706";
@@ -87,26 +86,34 @@
             });
 
             ndef.addEventListener("reading", async ({ serialNumber }) => {
-                // Bersihkan format UID (hilangkan tanda titik dua dan buat huruf kapital)
                 const uid = serialNumber.replace(/:/g, "").toUpperCase();
                 logDiv.innerText = "UID Terbaca: " + uid;
-                statusDiv.innerText = "Status: Mengirim data ke Google Sheets...";
+                statusDiv.innerText = "Status: Memeriksa database...";
                 statusDiv.style.color = "#2563eb";
 
                 try {
-                    // Mengirim UID ke Google Apps Script menggunakan HTTP GET
-                    // 'no-cors' digunakan untuk menghindari masalah proteksi CORS browser
-                    await fetch(`${APPS_SCRIPT_URL}?uid=${uid}`, { mode: 'no-cors' });
+                    // Kunci Perubahan: Menghapus 'no-cors' agar browser bisa membaca teks balasan dari Google
+                    const response = await fetch(`${APPS_SCRIPT_URL}?uid=${uid}`);
+                    const data = await response.json(); // Mengubah balasan menjadi JSON objek
                     
-                    statusDiv.innerText = "Status: Sukses! Data tersimpan.";
-                    statusDiv.style.color = "#16a34a";
+                    // Menampilkan pesan sesuai kondisi dari Google Apps Script
+                    statusDiv.innerText = "Status: " + data.message;
+                    
+                    if (data.status === "success") {
+                        statusDiv.style.color = "#16a34a"; // Warna HIJAU jika berhasil simpan baru
+                    } else if (data.status === "exists") {
+                        statusDiv.style.color = "#d97706"; // Warna ORANYE/KUNING jika ID sudah ada
+                    } else {
+                        statusDiv.style.color = "#dc2626"; // Warna MERAH jika ada error lain
+                    }
+
                 } catch (err) {
-                    statusDiv.innerText = "Status: Gagal mengirim data.";
+                    statusDiv.innerText = "Status: Gagal memproses ke sistem.";
                     statusDiv.style.color = "#dc2626";
                     logDiv.innerText = err.message;
                 }
 
-                // Siapkan pemindaian berikutnya setelah jeda 3 detik
+                // Siapkan pemindaian berikutnya
                 setTimeout(() => {
                     statusDiv.innerText = "Status: Siap untuk kartu berikutnya...";
                     statusDiv.style.color = "#4b5563";
