@@ -47,6 +47,18 @@
             margin-top: 25px;
             display: none;
         }
+        /* Style baru untuk tulisan nama duplikat */
+        #duplicateName {
+            color: #2563eb; /* Warna Biru */
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            display: none; /* Disembunyikan secara default */
+            background-color: #eff6ff;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #bfdbfe;
+        }
         #qrImage {
             width: 160px;
             height: 160px;
@@ -69,6 +81,8 @@
     <div id="log">---</div>
     
     <div id="qrContainer">
+        <div id="duplicateName"></div>
+        
         <p style="font-size: 14px; color: #4b5563; font-weight: bold; margin-bottom: 8px;">QR Code Terbaru:</p>
         <img id="qrImage" src="" alt="QR Code">
     </div>
@@ -80,9 +94,10 @@
     const logDiv = document.getElementById("log");
     const qrContainer = document.getElementById("qrContainer");
     const qrImage = document.getElementById("qrImage");
+    const duplicateNameDiv = document.getElementById("duplicateName"); // Ambil elemen duplikat
 
     // PASTE URL WEB APP GOOGLE APPS SCRIPT YANG BARU DI SINI
-    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwqbebr2X9KMrDVp-j6nRHIou26j7JosOr1uGL_Hstzqm4x6u0W3ZpD_tRdjWM8aEm3/exec";
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw1wGn3OD_AEgeBJrN8hjOtOUY-2zsNSlQIWiQW4h3bRz2PRQp4t_lLdTrn5njkhN8/exec";
 
     let ndef = null;
     let isProcessing = false;
@@ -114,6 +129,10 @@
                 if (isProcessing) return; 
                 isProcessing = true; 
                 
+                // Sembunyikan nama duplikat setiap ada scan baru
+                duplicateNameDiv.style.display = "none";
+                duplicateNameDiv.innerText = "";
+                
                 const uid = serialNumber.replace(/:/g, "").toUpperCase();
                 logDiv.innerText = "UID Terbaca: " + uid;
                 
@@ -124,7 +143,6 @@
                 statusDiv.style.color = "#2563eb";
 
                 try {
-                    // Hanya kirim UID, backend akan mencari baris yang kosong otomatis
                     const response = await fetch(`${APPS_SCRIPT_URL}?uid=${uid}`);
                     const data = await response.json();
                     
@@ -132,9 +150,17 @@
                     
                     if (data.status === "success") {
                         statusDiv.style.color = "#16a34a"; // Hijau
-                    } else if (data.status === "exists" || data.status === "full") {
+                    } 
+                    else if (data.status === "exists") {
                         statusDiv.style.color = "#d97706"; // Oranye
-                    } else {
+                        // Tampilkan nama pemilik sebelumnya dengan warna biru
+                        duplicateNameDiv.innerText = "Dimiliki oleh: " + data.owner;
+                        duplicateNameDiv.style.display = "block";
+                    } 
+                    else if (data.status === "full") {
+                        statusDiv.style.color = "#d97706"; // Oranye
+                    } 
+                    else {
                         statusDiv.style.color = "#dc2626"; // Merah
                     }
 
