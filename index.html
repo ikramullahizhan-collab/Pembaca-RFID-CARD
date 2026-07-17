@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NFC Reader ke Google Sheets + QR Code</title>
+    <title>Auto-Pairing NFC ke Google Sheets</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -35,7 +35,7 @@
         .btn:disabled { background-color: #9ca3af; cursor: not-allowed; }
         #status {
             margin-top: 25px;
-            font-size: 18px;
+            font-size: 16px;
             font-weight: bold;
         }
         #log {
@@ -60,8 +60,8 @@
 <body>
 
 <div class="container">
-    <h2>NFC Scan App</h2>
-    <p>Tekan tombol di bawah sekali untuk mengaktifkan sensor, lalu dekatkan kartu RFID/NFC ke bagian belakang HP.</p>
+    <h2>NFC Auto-Pairing</h2>
+    <p>Aktifkan sensor, lalu tempelkan kartu secara berurutan. Sistem akan otomatis mengisi ke nama yang kosong.</p>
     
     <button id="scanButton" class="btn">Aktifkan Sensor NFC</button>
     
@@ -69,7 +69,7 @@
     <div id="log">---</div>
     
     <div id="qrContainer">
-        <p style="font-size: 14px; color: #4b5563; font-weight: bold; margin-bottom: 8px;">QR Code ID Kartu Anda:</p>
+        <p style="font-size: 14px; color: #4b5563; font-weight: bold; margin-bottom: 8px;">QR Code Terbaru:</p>
         <img id="qrImage" src="" alt="QR Code">
     </div>
 </div>
@@ -81,11 +81,11 @@
     const qrContainer = document.getElementById("qrContainer");
     const qrImage = document.getElementById("qrImage");
 
-    // PASTE URL WEB APP GOOGLE APPS SCRIPT DI SINI
-    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzkBNzpJFC75mLTrCQ7_6E-aGfheZO8chKuLGNYwhPx7ZipmT9AdLLS9Y0fzuQOKOru/exec";
+    // PASTE URL WEB APP GOOGLE APPS SCRIPT YANG BARU DI SINI
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwqbebr2X9KMrDVp-j6nRHIou26j7JosOr1uGL_Hstzqm4x6u0W3ZpD_tRdjWM8aEm3/exec";
 
     let ndef = null;
-    let isProcessing = false; // Kunci pengaman agar tidak double scan saat loading
+    let isProcessing = false;
 
     scanButton.addEventListener("click", async () => {
         if (!("NDEFReader" in window)) {
@@ -99,13 +99,11 @@
             ndef = new NDEFReader();
             await ndef.scan();
             
-            // Perubahan UI setelah sensor berhasil menyala
-            statusDiv.innerText = "Status: Sensor Aktif! Tempelkan kartu...";
+            statusDiv.innerText = "Status: Sensor Aktif! Tempelkan kartu pertama...";
             statusDiv.style.color = "#d97706";
             scanButton.disabled = true; 
             scanButton.innerText = "Sensor NFC Siap";
 
-            // Event listener dipasang CUKUP SEKALI di sini
             ndef.addEventListener("readingerror", () => {
                 if (!isProcessing) {
                     logDiv.innerText = "Gagal membaca kartu. Coba tempelkan ulang.";
@@ -113,47 +111,44 @@
             });
 
             ndef.addEventListener("reading", async ({ serialNumber }) => {
-                // Jika sedang ada proses kirim data yang berjalan, abaikan pindaian baru
                 if (isProcessing) return; 
-                
-                isProcessing = true; // Kunci sensor aktif
+                isProcessing = true; 
                 
                 const uid = serialNumber.replace(/:/g, "").toUpperCase();
                 logDiv.innerText = "UID Terbaca: " + uid;
                 
-                // 1. Tampilkan QR Code lokal secara instan
                 qrImage.src = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${uid}`;
                 qrContainer.style.display = "block";
                 
-                statusDiv.innerText = "Status: Memeriksa database...";
+                statusDiv.innerText = "Status: Menyimpan otomatis ke database...";
                 statusDiv.style.color = "#2563eb";
 
                 try {
-                    // 2. Kirim ke Google Sheets
+                    // Hanya kirim UID, backend akan mencari baris yang kosong otomatis
                     const response = await fetch(`${APPS_SCRIPT_URL}?uid=${uid}`);
                     const data = await response.json();
                     
                     statusDiv.innerText = "Status: " + data.message;
                     
                     if (data.status === "success") {
-                        statusDiv.style.color = "#16a34a"; // Hijau jika sukses
-                    } else if (data.status === "exists") {
-                        statusDiv.style.color = "#d97706"; // Oranye jika duplikat
+                        statusDiv.style.color = "#16a34a"; // Hijau
+                    } else if (data.status === "exists" || data.status === "full") {
+                        statusDiv.style.color = "#d97706"; // Oranye
                     } else {
-                        statusDiv.style.color = "#dc2626";
+                        statusDiv.style.color = "#dc2626"; // Merah
                     }
 
                 } catch (err) {
-                    statusDiv.innerText = "Status: Gagal terhubung ke Google Sheets.";
+                    statusDiv.innerText = "Status: Gagal terhubung ke server.";
                     statusDiv.style.color = "#dc2626";
                     logDiv.innerText = err.message;
                 }
 
-                // Beri jeda 3 detik agar user bisa membaca status sebelum sensor siap menerima kartu berikutnya
+                // Beri jeda 3 detik sebelum siap untuk kartu berikutnya
                 setTimeout(() => {
-                    statusDiv.innerText = "Status: Standby. Tempelkan kartu berikutnya...";
+                    statusDiv.innerText = "Status: Standby. Tempelkan kartu selanjutnya...";
                     statusDiv.style.color = "#d97706";
-                    isProcessing = false; // Buka kembali kunci sensor
+                    isProcessing = false; 
                 }, 3000);
             });
 
